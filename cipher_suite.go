@@ -14,12 +14,21 @@ import (
 	"golang.org/x/crypto/blake2s"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
+	"github.com/nbrownus/go-x509"
 )
 
 // A DHKey is a keypair used for Diffie-Hellman key agreement.
 type DHKey struct {
 	Private []byte
 	Public  []byte
+}
+
+// Let's use X509 for static keys, yay.
+type X509 struct {
+	Private []byte
+	Public  x509.X25519PublicKey
+	Cert *x509.Certificate
+
 }
 
 // A DHFunc implements Diffie-Hellman key agreement.

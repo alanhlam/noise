@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
+	"github.com/nbrownus/go-x509"
 )
 
 // A CipherState provides symmetric encryption and decryption after a successful
@@ -62,19 +62,11 @@ func (s *CipherState) Cipher() Cipher {
 	return s.c
 }
 
-func (s *CipherState) Rekey() {
-	var zeros [32]byte
-	var out []byte
-	out = s.c.Encrypt(out, math.MaxUint64, []byte{}, zeros[:])
-	copy(s.k[:], out[:32])
-	s.c = s.cs.Cipher(s.k)
-}
-
 type symmetricState struct {
 	CipherState
-	hasK bool
-	ck   []byte
-	h    []byte
+	hasK   bool
+	ck     []byte
+	h      []byte
 
 	prevCK []byte
 	prevH  []byte
@@ -129,6 +121,7 @@ func (s *symmetricState) EncryptAndHash(out, plaintext []byte) []byte {
 	s.MixHash(ciphertext[len(out):])
 	return ciphertext
 }
+
 
 func (s *symmetricState) DecryptAndHash(out, data []byte) ([]byte, error) {
 	if !s.hasK {
@@ -204,11 +197,12 @@ const MaxMsgLen = 65535
 // after the handshake is complete.
 type HandshakeState struct {
 	ss              symmetricState
-	s               DHKey  // local static keypair
+	// s               DHKey  // local static keypair
+	s               X509  // local certificate keypair
 	e               DHKey  // local ephemeral keypair
 	rs              []byte // remote party's static public key
 	re              []byte // remote party's ephemeral public key
-	psk             []byte // preshared key, maybe zero length
+	psk		[]byte // preshared key, maybe zero length
 	messagePatterns [][]MessagePattern
 	shouldWrite     bool
 	msgIdx          int
@@ -245,7 +239,7 @@ type Config struct {
 
 	// StaticKeypair is this peer's static keypair, required if part of the
 	// handshake.
-	StaticKeypair DHKey
+	StaticKeypair X509
 
 	// EphemeralKeypair is this peer's ephemeral keypair that was provided as
 	// a pre-message in the handshake.
@@ -286,10 +280,10 @@ func NewHandshakeState(c Config) *HandshakeState {
 		}
 		pskModifier = fmt.Sprintf("psk%d", c.PresharedKeyPlacement)
 		hs.messagePatterns = append([][]MessagePattern(nil), hs.messagePatterns...)
-		if c.PresharedKeyPlacement == 0 {
+		if (c.PresharedKeyPlacement == 0) {
 			hs.messagePatterns[0] = append([]MessagePattern{MessagePatternPSK}, hs.messagePatterns[0]...)
 		} else {
-			hs.messagePatterns[c.PresharedKeyPlacement-1] = append(hs.messagePatterns[c.PresharedKeyPlacement-1], MessagePatternPSK)
+			hs.messagePatterns[c.PresharedKeyPlacement - 1] = append(hs.messagePatterns[c.PresharedKeyPlacement - 1], MessagePatternPSK)
 		}
 	}
 	hs.ss.InitializeSymmetric([]byte("Noise_" + c.Pattern.Name + pskModifier + "_" + string(hs.ss.cs.Name())))
@@ -337,6 +331,7 @@ func (s *HandshakeState) WriteMessage(out, payload []byte) ([]byte, *CipherState
 	if len(payload) > MaxMsgLen {
 		panic("noise: message is too long")
 	}
+	fmt.Println("LEN PAYLOAD :", len(payload))
 
 	for _, msg := range s.messagePatterns[s.msgIdx] {
 		switch msg {
@@ -351,7 +346,11 @@ func (s *HandshakeState) WriteMessage(out, payload []byte) ([]byte, *CipherState
 			if len(s.s.Public) == 0 {
 				panic("noise: invalid state, s.Public is nil")
 			}
-			out = s.ss.EncryptAndHash(out, s.s.Public)
+			//out = s.ss.EncryptAndHash(out, s.s.Public)
+			size := len(s.s.Cert.Raw)
+			s.s.Cert.Raw = append([]byte{byte(size)}, s.s.Cert.Raw...)
+			// fmt.Println("RAW CERT: ", s.s.Cert.Raw)
+			out = s.ss.EncryptAndHash(out, s.s.Cert.Raw)
 		case MessagePatternDHEE:
 			s.ss.MixKey(s.ss.cs.DH(s.e.Private, s.re))
 		case MessagePatternDHES:
@@ -367,7 +366,6 @@ func (s *HandshakeState) WriteMessage(out, payload []byte) ([]byte, *CipherState
 	s.shouldWrite = false
 	s.msgIdx++
 	out = s.ss.EncryptAndHash(out, payload)
-
 	if s.msgIdx >= len(s.messagePatterns) {
 		cs1, cs2 := s.ss.Split()
 		return out, cs1, cs2
@@ -420,7 +418,17 @@ func (s *HandshakeState) ReadMessage(out, message []byte) ([]byte, *CipherState,
 				if len(s.rs) > 0 {
 					panic("noise: invalid state, rs is not nil")
 				}
-				s.rs, err = s.ss.DecryptAndHash(s.rs[:0], message[:expected])
+				var rawCert []byte
+				expected = len(message) - 516
+				rawCert, err = s.ss.DecryptAndHash(rawCert[:0], message[:expected])
+				// fmt.Println("LEN:", len(message[:expected]))
+				c, _ := x509.ParseCertificate(rawCert[1:])
+				fmt.Println("Certificate Parsed: ", c)
+				X509Pub := c.PublicKey.(*x509.X25519PublicKey)
+				s.rs = []byte(*X509Pub)
+			// 	expected += 0
+				fmt.Println("Remote static key: ", s.rs)
+				// s.rs, err = s.ss.DecryptAndHash(s.rs[:0], message[:expected])
 			}
 			if err != nil {
 				s.ss.Rollback()
