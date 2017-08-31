@@ -38,6 +38,14 @@ func (s *CipherState) Encrypt(out, ad, plaintext []byte) []byte {
 	return out
 }
 
+func (s *CipherState) EncryptDanger(out, ad, plaintext []byte, n uint64) []byte {
+	if s.invalid {
+		panic("noise: CipherSuite has been copied, state is invalid")
+	}
+	out = s.c.Encrypt(out, n, ad, plaintext)
+	return out
+}
+
 // Decrypt checks the authenticity of the ciphertext and authenticated data and
 // then decrypts and appends the plaintext to out. This method automatically
 // increments the nonce after every call, messages must be provided in the same
@@ -48,6 +56,14 @@ func (s *CipherState) Decrypt(out, ad, ciphertext []byte) ([]byte, error) {
 	}
 	out, err := s.c.Decrypt(out, s.n, ad, ciphertext)
 	s.n++
+	return out, err
+}
+
+func (s *CipherState) DecryptDanger(out, ad, ciphertext []byte, n uint64) ([]byte, error) {
+	if s.invalid {
+		panic("noise: CipherSuite has been copied, state is invalid")
+	}
+	out, err := s.c.Decrypt(out, n, ad, ciphertext)
 	return out, err
 }
 
