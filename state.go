@@ -10,8 +10,8 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"io"
 	"github.com/nbrownus/go-x509"
+	"io"
 )
 
 // A CipherState provides symmetric encryption and decryption after a successful
@@ -80,9 +80,9 @@ func (s *CipherState) Cipher() Cipher {
 
 type symmetricState struct {
 	CipherState
-	hasK   bool
-	ck     []byte
-	h      []byte
+	hasK bool
+	ck   []byte
+	h    []byte
 
 	prevCK []byte
 	prevH  []byte
@@ -137,7 +137,6 @@ func (s *symmetricState) EncryptAndHash(out, plaintext []byte) []byte {
 	s.MixHash(ciphertext[len(out):])
 	return ciphertext
 }
-
 
 func (s *symmetricState) DecryptAndHash(out, data []byte) ([]byte, error) {
 	if !s.hasK {
@@ -212,13 +211,13 @@ const MaxMsgLen = 65535
 // A HandshakeState tracks the state of a Noise handshake. It may be discarded
 // after the handshake is complete.
 type HandshakeState struct {
-	ss              symmetricState
+	ss symmetricState
 	// s               DHKey  // local static keypair
-	s               X509  // local certificate keypair
+	s               X509   // local certificate keypair
 	e               DHKey  // local ephemeral keypair
 	rs              []byte // remote party's static public key
 	re              []byte // remote party's ephemeral public key
-	psk		[]byte // preshared key, maybe zero length
+	psk             []byte // preshared key, maybe zero length
 	messagePatterns [][]MessagePattern
 	shouldWrite     bool
 	msgIdx          int
@@ -296,10 +295,10 @@ func NewHandshakeState(c Config) *HandshakeState {
 		}
 		pskModifier = fmt.Sprintf("psk%d", c.PresharedKeyPlacement)
 		hs.messagePatterns = append([][]MessagePattern(nil), hs.messagePatterns...)
-		if (c.PresharedKeyPlacement == 0) {
+		if c.PresharedKeyPlacement == 0 {
 			hs.messagePatterns[0] = append([]MessagePattern{MessagePatternPSK}, hs.messagePatterns[0]...)
 		} else {
-			hs.messagePatterns[c.PresharedKeyPlacement - 1] = append(hs.messagePatterns[c.PresharedKeyPlacement - 1], MessagePatternPSK)
+			hs.messagePatterns[c.PresharedKeyPlacement-1] = append(hs.messagePatterns[c.PresharedKeyPlacement-1], MessagePatternPSK)
 		}
 	}
 	hs.ss.InitializeSymmetric([]byte("Noise_" + c.Pattern.Name + pskModifier + "_" + string(hs.ss.cs.Name())))
@@ -347,7 +346,7 @@ func (s *HandshakeState) WriteMessage(out, payload []byte) ([]byte, *CipherState
 	if len(payload) > MaxMsgLen {
 		panic("noise: message is too long")
 	}
-	fmt.Println("LEN PAYLOAD :", len(payload))
+	// fmt.Println("LEN PAYLOAD :", len(payload))
 
 	for _, msg := range s.messagePatterns[s.msgIdx] {
 		switch msg {
@@ -439,11 +438,11 @@ func (s *HandshakeState) ReadMessage(out, message []byte) ([]byte, *CipherState,
 				rawCert, err = s.ss.DecryptAndHash(rawCert[:0], message[:expected])
 				// fmt.Println("LEN:", len(message[:expected]))
 				c, _ := x509.ParseCertificate(rawCert[1:])
-				fmt.Println("Certificate Parsed: ", c)
+				//fmt.Println("Certificate Parsed: ", c)
 				X509Pub := c.PublicKey.(*x509.X25519PublicKey)
 				s.rs = []byte(*X509Pub)
-			// 	expected += 0
-				fmt.Println("Remote static key: ", s.rs)
+				// 	expected += 0
+				//fmt.Println("Remote static key: ", s.rs)
 				// s.rs, err = s.ss.DecryptAndHash(s.rs[:0], message[:expected])
 			}
 			if err != nil {
