@@ -213,11 +213,12 @@ const MaxMsgLen = 65535
 type HandshakeState struct {
 	ss symmetricState
 	// s               DHKey  // local static keypair
-	s               X509   // local certificate keypair
-	e               DHKey  // local ephemeral keypair
-	rs              []byte // remote party's static public key
-	re              []byte // remote party's ephemeral public key
-	psk             []byte // preshared key, maybe zero length
+	s               X509             // local certificate keypair
+	r               x509.Certificate // remote certificate public key only
+	e               DHKey            // local ephemeral keypair
+	rs              []byte           // remote party's static public key
+	re              []byte           // remote party's ephemeral public key
+	psk             []byte           // preshared key, maybe zero length
 	messagePatterns [][]MessagePattern
 	shouldWrite     bool
 	msgIdx          int
@@ -436,14 +437,11 @@ func (s *HandshakeState) ReadMessage(out, message []byte) ([]byte, *CipherState,
 				var rawCert []byte
 				expected = len(message) - 516
 				rawCert, err = s.ss.DecryptAndHash(rawCert[:0], message[:expected])
-				// fmt.Println("LEN:", len(message[:expected]))
-				c, _ := x509.ParseCertificate(rawCert[1:])
-				//fmt.Println("Certificate Parsed: ", c)
-				X509Pub := c.PublicKey.(*x509.X25519PublicKey)
+				certificate, _ := x509.ParseCertificate(rawCert[1:])
+				// for now store the remote certificate into the handshake state struct as well
+				s.r = *certificate
+				X509Pub := certificate.PublicKey.(*x509.X25519PublicKey)
 				s.rs = []byte(*X509Pub)
-				// 	expected += 0
-				//fmt.Println("Remote static key: ", s.rs)
-				// s.rs, err = s.ss.DecryptAndHash(s.rs[:0], message[:expected])
 			}
 			if err != nil {
 				s.ss.Rollback()
