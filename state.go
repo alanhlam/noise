@@ -437,6 +437,11 @@ func (s *HandshakeState) ReadMessage(out, message []byte) ([]byte, *CipherState,
 				var rawCert []byte
 				expected = len(message) - 516
 				rawCert, err = s.ss.DecryptAndHash(rawCert[:0], message[:expected])
+				// temporary fix for now while we investigate
+				if len(rawCert) < 1 {
+					s.ss.Rollback()
+					return nil, nil, nil, errors.New("Bad certificate size")
+				}
 				certificate, _ := x509.ParseCertificate(rawCert[1:])
 				// for now store the remote certificate into the handshake state struct as well
 				s.r = *certificate
